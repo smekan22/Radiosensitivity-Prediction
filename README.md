@@ -63,6 +63,9 @@ The pipeline was designed to let users customise different steps in the model de
 1. feature_selector - a class that follows the same format as a sklearn model e.g with fit, fit_transform, transform methods. The purpose of this entry point is to let users define a feature selection method that can be applied during each crossvalidation training run data independently and then apply the feature selection to the validation and test sets when evaluating
 2. data_augmentor - a function that takes in the training dataset and outputs an augmented training dataset e.g with artificial new data points
 3. results_processors - a list of functions that are run after a model for a training run has been completed. This can be various metrics, plotting training history, saving model weights etc.
+
+#### Google Drive
+https://drive.google.com/drive/folders/1r0rk3xmkmJCHwV07QETg6Of0xnUq8mCh?usp=sharing
    
 #### Grid search
 Grid searching can be done by specifying the desired parameters to gridsearch over in a dictionary where each config item that you want to gridsearch over is a key in the dictionary and the value is a dictionary of the parameters to be searched. The keys of the inner dictionary are just identifiers for that particular parameter setting and the value is the actual value you want to gridsearch over. You then use construct_gs_params on this dictionary and assign the output to grid_search variable in the config
