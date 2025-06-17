@@ -80,7 +80,7 @@ class ComparativeAnalysis:
         upper = round(maximum_y_value, 1)
         y_ticks = [lower, mid, upper]
         y_ticks_labels = y_ticks
-        return y_ticks, y_ticks_labels
+        return [0.6, 0.7, 0.8, 0.9], [0.6, 0.7, 0.8, 0.9] #y_ticks, y_ticks_labels
     
     def _configure_spine_visibility(self, ax):
         ax.spines['right'].set_visible(self.config.right_spine_visibility.value)

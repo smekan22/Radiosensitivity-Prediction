@@ -11,23 +11,28 @@ from keras.models import Sequential
 sys.path.insert(0, os.getcwd())
 import architecture.coef_weights_utils as mcw
 
-def collate_grid_search(results : dict, metric : str):
+def collate_grid_search(results : dict):
     """
     Function for collating results after all settings in grid search have been computed
-    Goes through all the summary results in each folder and takes the mean of the validation
-    Note this function is not really complete, was just a WIP
+    Goes through all the summary results in each folder and selects the best hyperparameters based on metric
+    for each test fold or across the the whole dataset depending on if nested cv is on.
     """
     summaries = []
-    for i, result in enumerate(results["results"]):
-        df = pd.read_csv(f"{result}/fold_summaries.csv", index_col=0)
-        summaries.append(df.groupby("split")[metric].mean().loc["val"])
-    return np.array(summaries).argmax()
+    run_dir = results["save_dir"]
+    gs_params = results["params"]
+    gs_dirs = results["gs_dirs"]
+    test_dirs = results["test_dirs"]
+    for i, d in enumerate(gs_dirs):
+        df = pd.read_csv(f"{d}/summary_results.csv", index_col=0)
+        df["test_fold"] = test_dirs[i]
+        df["hyperparams"] = gs_params[i]
+        summaries.append(df)
+    summaries = pd.concat(summaries).reset_index()
+    summaries.to_csv(f"{run_dir}/results.csv")
 
 def collate_folds(results : dict):
     """
     Function to perform any post processing across folds after the runs have finished
-    Similar to collate_grid_search this is also WIP, mostly been doing my own post processing
-    manually
     """
     summaries = []
     for i, result in enumerate(results["results"]):
@@ -66,6 +71,7 @@ def save_results(results : dict, processor, metrics : dict, task : str, pred_idx
         result_summary.append(processor(results, "test", run_dir, metrics, task, pred_idx))
     result_summary = pd.DataFrame(result_summary, index=idxs)
     result_summary.to_csv(f"{run_dir}/summary_results.csv")
+    return result_summary
 
 def save_supervised_result(results : dict, split : str, run_dir : str, metrics : dict, task : str,
                            pred_idx : int = 0):

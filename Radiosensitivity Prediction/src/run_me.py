@@ -39,9 +39,11 @@ config["views"] = [("gexpr", f"cleveland_gene_expression.csv", selected_genes, 0
 config["view_alignment_method"] = "drop samples"
 config["labels"] = [("cleveland_auc_only.csv", 0)]
 config["tv_split_seed"] = 42
-config["inner_kfolds"] = 1
-config["outer_kfolds"] = 10
-config["validation_prop"] = 0.1
+config["inner_kfolds"] = 5
+config["outer_kfolds"] = 1
+config["test_samples"] = 0.1
+config["use_validation_on_test"] = False
+config["val_metric"] = lambda x : r2_score(x["val_df"].ys, x["val_preds"])
 config["results_processors"] = [lambda x : save_results(x, save_supervised_result, {"r2" : r2_score,
                                                                                     "explained_variance" : explained_variance_score,
                                                                                     "mse" : mean_squared_error,
@@ -57,6 +59,17 @@ step_decay_part = partial(
     drop=0.5,
     epochs_drop=25,
 )
+
+config["fitting_params"] = {
+                                "epochs" : 200,
+                                "batch" : 50,
+                                "LRScheduler" : LearningRateScheduler(step_decay_part, verbose=0),
+                                "early_stopping" : None,
+                                "prediction_output" : "average",
+                                "shuffle_samples" : True,
+                                "class_weight" : None
+                            }
+
 gs_params = {"model_params" : {f"reg_{l}" : {
                             "pp_relations" : "architecture/Reactome/ReactomePathwaysRelation.txt",
                             "gp_relations" : "architecture/Reactome/ReactomePathways.gmt",
@@ -76,25 +89,7 @@ gs_params = {"model_params" : {f"reg_{l}" : {
                             "loss" : ["MeanSquaredError"] * (n_hidden_layers + 1),
                             "loss_weights" : [2, 7, 20, 54, 148, 400],
                             "optimizer" : {"class_name" : "Adam", "config" : {"learning_rate" : 1e-3}}
-                        } for l in [1, 0.1, 0.01, 0.001]},
-            "fitting_params" : {"es" : {
-                                "epochs" : 200,
-                                "batch" : 50,
-                                "LRScheduler" : LearningRateScheduler(step_decay_part, verbose=0),
-                                "early_stopping" : FixedEarlyStopping(patience=25, min_deltas=[1e-2]),
-                                "prediction_output" : "average",
-                                "shuffle_samples" : True,
-                                "class_weight" : None
-                            },
-                            "no_es" : {
-                                "epochs" : 200,
-                                "batch" : 50,
-                                "LRScheduler" : LearningRateScheduler(step_decay_part, verbose=0),
-                                "early_stopping" : None,
-                                "prediction_output" : "average",
-                                "shuffle_samples" : True,
-                                "class_weight" : None
-                            }}}
+                        } for l in [1, 0.1, 0.01, 0.001]}}
 
 config["grid_search"] = construct_gs_params(gs_params)
 
@@ -122,25 +117,7 @@ gs_params = {"model_params" : {f"reg_{l}" : {
                             "loss" : ["MeanSquaredError"] * (n_hidden_layers + 1),
                             "loss_weights" : [2, 7, 20, 54, 148, 400],
                             "optimizer" : {"class_name" : "Adam", "config" : {"learning_rate" : 1e-3}}
-                        } for l in [1, 0.1, 0.01, 0.001]},
-            "fitting_params" : {"es" : {
-                                "epochs" : 200,
-                                "batch" : 50,
-                                "LRScheduler" : LearningRateScheduler(step_decay_part, verbose=0),
-                                "early_stopping" : FixedEarlyStopping(patience=25, min_deltas=[1e-2]),
-                                "prediction_output" : "average",
-                                "shuffle_samples" : True,
-                                "class_weight" : None
-                            },
-                            "no_es" : {
-                                "epochs" : 200,
-                                "batch" : 50,
-                                "LRScheduler" : LearningRateScheduler(step_decay_part, verbose=0),
-                                "early_stopping" : None,
-                                "prediction_output" : "average",
-                                "shuffle_samples" : True,
-                                "class_weight" : None
-                            }}}
+                        } for l in [1, 0.1, 0.01, 0.001]}}
 
 config["grid_search"] = construct_gs_params(gs_params)
 config["run_id"] = "dense"
@@ -157,7 +134,7 @@ config["results_processors"] = config["results_processors"][:-1]
 config["grid_search"] = construct_gs_params(gs_params)
 pipeline = MLPipeline(config)
 pipeline.run_crossvalidation()
-
+"""
 # Compile results
 def compile_results(tag, gridsearch):
     results = []
@@ -172,7 +149,8 @@ def compile_results(tag, gridsearch):
                 result[k] = run_config[v]
             results.append(result)
     results = pd.concat(results)
-    top = results.loc[results["split"] == "val"].groupby(list(gridsearch.keys()))["auc_r2"].mean().reset_index().sort_values("auc_r2", ascending=False)
+    val_means = results.loc[results["split"] == "val"].groupby(list(gridsearch.keys()) + ["test_fold"])["auc_r2"].mean().reset_index()
+    top = val_means.iloc[val_means.groupby("test_fold")["auc_r2"].idxmax(), ]
     filt = None
     for k,v in gridsearch.items():
         if filt is None:
@@ -180,12 +158,20 @@ def compile_results(tag, gridsearch):
         else:
             filt = (results[k] == top[k].iat[0]) & filt
     results = results.loc[filt]
-    results = results.groupby("split")[["auc_r2", "auc_explained_variance", "auc_mse", "auc_mae"]].agg(["mean", "std"])
+    aggresults = results.groupby("split")[["auc_r2", "auc_explained_variance", "auc_mse", "auc_mae"]].agg(["mean", "std"])
     hyperparams = "_".join([top[k].iat[0] for k in gridsearch.keys()])
-    results.to_csv(f"{wd}/{tag}_{hyperparams}_results.csv")
+    aggresults.to_csv(f"{wd}/{tag}_{hyperparams}_results.csv")
+    return results.loc[results["split"] == "test"]
 
-compile_results("dense", {"reg" : "model_params_choice", "es" : "fitting_params_choice"})
-compile_results("pnet", {"reg" : "model_params_choice", "es" : "fitting_params_choice"})
-compile_results("krr", {"hyper" : "model_params_choice"})
+dense_results = compile_results("dense", {"reg" : "model_params_choice", "es" : "fitting_params_choice"})
+pnet_results = compile_results("pnet", {"reg" : "model_params_choice", "es" : "fitting_params_choice"})
+krr_results = compile_results("krr", {"hyper" : "model_params_choice"})
 
+metrics = ["auc_r2", "auc_explained_variance", "auc_mse", "auc_mae"]
+pvd = [ttest_ind(pnet_results[x], dense_results[x]).pvalue for x in metrics]
+pvk = [ttest_ind(pnet_results[x], krr_results[x]).pvalue for x in metrics]
+svd = [ttest_ind(krr_results[x], dense_results[x]).pvalue for x in metrics]
+sigresults = pd.DataFrame((pvd, pvk, svd), columns=metrics, index=["pnet_v_dense", "pnet_v_krr", "krr_v_dense"])
+sigresults.to_csv(f"{wd}/significance_tests.csv")
+"""
 

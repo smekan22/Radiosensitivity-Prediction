@@ -22,6 +22,11 @@ Install requirements file from the root directory of the repository
 ```
 pip install -r requirements.txt
 ```
+To run P-NET with GPU support, you will likely need to install these versions of CUDA toolkit and CUDnn
+```
+conda install -c conda-forge cudatoolkit=11.0 cudnn=8.0
+```
+
 All scripts should be run from the root directory rather than from the individual experiment folders. If you are running the radiosensitivity experiment scripts you will also need to have R installed with tidyverse.
 
 ## Structure of the repository
