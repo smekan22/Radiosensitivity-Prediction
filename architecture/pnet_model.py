@@ -102,17 +102,29 @@ class TFModel:
 
         # Fit the model
         logging.info("start fitting")
-        history = self.predictor.fit(
-            train_df.xs,
-            [train_df.ys] * (self.model_params["n_hidden_layers"] + 1),
-            validation_data=(val_df.xs, [val_df.ys] * (self.model_params["n_hidden_layers"] + 1)),
-            epochs=self.fitting_params["epochs"],
-            batch_size=self.fitting_params["batch"],
-            class_weight=self.fitting_params["class_weight"] if "class_weight" in self.fitting_params.keys() else None,
-            verbose=0,
-            callbacks=callbacks,
-            shuffle=self.fitting_params["shuffle_samples"]
-        )
+        if len(val_df) > 0:
+            history = self.predictor.fit(
+                train_df.xs,
+                [train_df.ys] * (self.model_params["n_hidden_layers"] + 1),
+                validation_data=(val_df.xs, [val_df.ys] * (self.model_params["n_hidden_layers"] + 1)),
+                epochs=self.fitting_params["epochs"],
+                batch_size=self.fitting_params["batch"],
+                class_weight=self.fitting_params["class_weight"] if "class_weight" in self.fitting_params.keys() else None,
+                verbose=0,
+                callbacks=callbacks,
+                shuffle=self.fitting_params["shuffle_samples"]
+            )
+        else:
+            history = self.predictor.fit(
+                train_df.xs,
+                [train_df.ys] * (self.model_params["n_hidden_layers"] + 1),
+                epochs=self.fitting_params["epochs"],
+                batch_size=self.fitting_params["batch"],
+                class_weight=self.fitting_params["class_weight"] if "class_weight" in self.fitting_params.keys() else None,
+                verbose=0,
+                callbacks=callbacks,
+                shuffle=self.fitting_params["shuffle_samples"]
+            )
         
         return self, history
     

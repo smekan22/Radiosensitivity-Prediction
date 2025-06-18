@@ -1,6 +1,7 @@
 import os, sys, json
 from sklearn.svm import LinearSVC
 from sklearn.metrics import roc_auc_score, accuracy_score, average_precision_score, f1_score
+from scipy.stats import ttest_ind
 
 sys.path.insert(0, os.getcwd())
 from architecture.data_utils import *
@@ -34,9 +35,10 @@ config["views"] = [("gexpr", f"GTEx_gene_log2_tpm_0.csv", selected_genes, 0, lam
 config["view_alignment_method"] = "drop samples"
 config["labels"] = [("tissue_classes.csv", 0)]
 config["tv_split_seed"] = 42
-config["inner_kfolds"] = 1
+config["inner_kfolds"] = 5
 config["outer_kfolds"] = 10
-config["validation_prop"] = 0.1
+config["validation_prop"] = 0
+config["val_metric"] = lambda x : f1_score(x["val_df"].ys, (x["val_preds"] >= np.sort(x["val_preds"], axis=1)[:,[-1]]).astype(int), average="weighted")
 config["results_processors"] = [lambda x : save_results(x, save_supervised_result, {"auc" : lambda y, y_hat : roc_auc_score(y, y_hat, multi_class="ovr", average="micro"),
                                                                           "auprc" : lambda y, y_hat : average_precision_score(y, y_hat, average="micro"),
                                                                           "f1" : lambda ys, preds : f1_score(ys, (preds >= np.sort(preds, axis=1)[:,[-1]]).astype(int), average="weighted"),
@@ -146,13 +148,21 @@ def compile_results(tag, gridsearch=None):
             else:
                 filt = (results[k] == top[k].iat[0]) & filt
         results = results.loc[filt]
-        results = results.groupby("split")[["auc", "auprc", "f1", "accuracy"]].agg(["mean", "std"])
+        aggresults = results.groupby("split")[["auc", "auprc", "f1", "accuracy"]].agg(["mean", "std"])
         hyperparams = "_".join([top[k].iat[0] for k in gridsearch.keys()])
-        results.to_csv(f"{wd}/{tag}_{hyperparams}_results.csv")
+        aggresults.to_csv(f"{wd}/{tag}_{hyperparams}_results.csv")
     else:
-        results = results.groupby("split")[["auc", "auprc", "f1", "accuracy"]].agg(["mean", "std"])
-        results.to_csv(f"{wd}/{tag}_results.csv")
+        aggresults = results.groupby("split")[["auc", "auprc", "f1", "accuracy"]].agg(["mean", "std"])
+        aggresults.to_csv(f"{wd}/{tag}_results.csv")
+    return results.loc[results["split"] == "test"]
 
-compile_results("pnet", {"reg" : "model_params_choice"})
-compile_results("dense", {"reg" : "model_params_choice"})
-compile_results("svc", {"c" : "model_params_choice"})
+pnet_results = compile_results("pnet", {"reg" : "model_params_choice"})
+dense_results = compile_results("dense", {"reg" : "model_params_choice"})
+svc_results = compile_results("svc", {"c" : "model_params_choice"})
+
+metrics = ["auc", "auprc", "f1", "accuracy"]
+pvd = [ttest_ind(pnet_results[x], dense_results[x]).pvalue for x in metrics]
+pvs = [ttest_ind(pnet_results[x], svc_results[x]).pvalue for x in metrics]
+svd = [ttest_ind(svc_results[x], dense_results[x]).pvalue for x in metrics]
+sigresults = pd.DataFrame((pvd, pvs, svd), columns=metrics, index=["pnet_v_dense", "pnet_v_svc", "svc_v_dense"])
+sigresults.to_csv(f"{wd}/significance_tests.csv")
