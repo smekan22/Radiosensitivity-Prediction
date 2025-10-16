@@ -27,7 +27,7 @@ if not os.path.exists(feature_names_path):
     with open(feature_names_path, 'w') as f:
         for col in meta_df.columns:
             f.write(f"{col}\n")
-    print(f"✅ Created {feature_names_path}")
+    print(f" Created {feature_names_path}")
 
 met_names = pd.read_csv(feature_names_path, header=None)[0].tolist()
 print(f"Loaded {len(met_names)} metabolites")
